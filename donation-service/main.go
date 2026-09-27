@@ -251,3 +251,4 @@ func (a *App) sendNotificationEvent(d Donation) {
 		log.Printf("Falha ao despachar evento SQS: %v", err)
 	}
 }
+// CI pipeline test trigger (safe to remove)
