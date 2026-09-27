@@ -1,0 +1,374 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solidarytech-ecosystem-health
+  namespace: monitoring
+  labels:
+    # Grafana sidecar discovers this ConfigMap and provisions the dashboard automatically.
+    grafana_dashboard: "1"
+    grafana_folder: "SolidaryTech"
+data:
+  solidarytech-health.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 1,
+          "title": "Cluster Resources",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "fillOpacity": 10},
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.7},
+                  {"color": "red", "value": 0.9}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 1},
+          "id": 2,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "single", "sort": "none"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
+              "legendFormat": "CPU Usage",
+              "refId": "A"
+            }
+          ],
+          "title": "Cluster CPU Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "fillOpacity": 10},
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.7},
+                  {"color": "red", "value": 0.9}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 1},
+          "id": 3,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "single", "sort": "none"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "1 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))",
+              "legendFormat": "Memory Usage",
+              "refId": "A"
+            }
+          ],
+          "title": "Cluster Memory Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "fillOpacity": 10},
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1},
+          "id": 4,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "none"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "count by (namespace) (kube_pod_info{namespace=~\"ns-ngo|ns-donation|ns-volunteer\"})",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Running Pods by Namespace",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+          "id": 5,
+          "title": "Microservices Traffic (via Nginx Ingress)",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "fillOpacity": 5},
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 10},
+          "id": 6,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "sum(rate(nginx_ingress_controller_requests[5m])) by (ingress)",
+              "legendFormat": "{{ingress}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Request Rate per Service (req/s)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "fillOpacity": 5},
+              "unit": "reqps",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 0.01}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 10},
+          "id": 7,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "sum(rate(nginx_ingress_controller_requests{status=~\"5..\"}[5m])) by (ingress)",
+              "legendFormat": "5xx - {{ingress}}",
+              "refId": "A"
+            }
+          ],
+          "title": "HTTP 5xx Error Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "fillOpacity": 5},
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 10},
+          "id": 8,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "histogram_quantile(0.99, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le, ingress))",
+              "legendFormat": "p99 - {{ingress}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Request Latency p99",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+          "id": 9,
+          "title": "Container Resources (SolidaryTech Namespaces)",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 1, "fillOpacity": 5},
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 19},
+          "id": 11,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "none"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"ns-ngo|ns-donation|ns-volunteer\", container!=\"\"}[5m])) by (namespace, pod)",
+              "legendFormat": "{{namespace}} / {{pod}}",
+              "refId": "A"
+            }
+          ],
+          "title": "CPU Usage by Pod (cores)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 1, "fillOpacity": 5},
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 19},
+          "id": 12,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "none"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "sum(container_memory_rss{namespace=~\"ns-ngo|ns-donation|ns-volunteer\", container!=\"\"}) by (namespace, pod)",
+              "legendFormat": "{{namespace}} / {{pod}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Memory RSS by Pod",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27},
+          "id": 13,
+          "title": "Live Logs — SolidaryTech Services",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "${lokids}"},
+          "gridPos": {"h": 14, "w": 24, "x": 0, "y": 28},
+          "id": 14,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "${lokids}"},
+              "expr": "{namespace=~\"ns-ngo|ns-donation|ns-volunteer\"} |= \"$log_filter\"",
+              "refId": "A"
+            }
+          ],
+          "title": "SolidaryTech Services — Live Log Stream",
+          "type": "logs"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "tags": ["solidarytech", "overview", "sre"],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Prometheus Datasource",
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "type": "datasource"
+          },
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Loki Datasource",
+            "name": "lokids",
+            "options": [],
+            "query": "loki",
+            "refresh": 1,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "", "value": ""},
+            "hide": 0,
+            "label": "Log Filter",
+            "name": "log_filter",
+            "options": [{"selected": true, "text": "", "value": ""}],
+            "query": "",
+            "skipUrlSync": false,
+            "type": "textbox"
+          }
+        ]
+      },
+      "time": {"from": "now-1h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "SolidaryTech — Ecosystem Health",
+      "uid": "solidarytech-ecosystem-health",
+      "version": 1,
+      "weekStart": ""
+    }

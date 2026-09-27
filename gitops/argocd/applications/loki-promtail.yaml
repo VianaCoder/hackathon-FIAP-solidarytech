@@ -1,0 +1,69 @@
+# Argo CD Application: loki
+# Deploys Loki (single-binary mode) for centralized log storage
+#
+# Uses multi-source (requires Argo CD >= 2.6)
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: "6.7.0"
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/gitops/monitoring/loki/values.yaml
+    - repoURL: https://github.com/VianaCoder/hackathon-FIAP-solidarytech.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+# Argo CD Application: promtail
+# Deploys Promtail as a DaemonSet to ship container logs to Loki
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: promtail
+      targetRevision: "6.16.4"
+      helm:
+        releaseName: promtail
+        valueFiles:
+          - $values/gitops/monitoring/promtail/values.yaml
+    - repoURL: https://github.com/VianaCoder/hackathon-FIAP-solidarytech.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

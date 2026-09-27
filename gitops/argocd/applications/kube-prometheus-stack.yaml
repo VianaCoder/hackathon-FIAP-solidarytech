@@ -1,0 +1,41 @@
+# Argo CD Application: kube-prometheus-stack
+# Deploys Prometheus + Grafana + Alertmanager + kube-state-metrics + node-exporter
+#
+# Uses multi-source (requires Argo CD >= 2.6):
+#   - Source 1: upstream Helm chart from prometheus-community
+#   - Source 2: values.yaml from this Git repository (ref: values)
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    # ServerSideApply is critical for large CRDs (e.g. PrometheusRule)
+    # that exceed the 256 KB client-side annotation limit.
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      # Pin to a specific version. Bump intentionally after testing.
+      targetRevision: "65.3.1"
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/gitops/monitoring/kube-prometheus-stack/values.yaml
+    # Git repo — used only to supply values files via $values reference
+    - repoURL: https://github.com/VianaCoder/hackathon-FIAP-solidarytech.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

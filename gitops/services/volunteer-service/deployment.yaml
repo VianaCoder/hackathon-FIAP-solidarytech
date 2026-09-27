@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volunteer-service
+  namespace: ns-volunteer
+  annotations:
+    # IRSA role granting dynamodb read/write on SolidaryTechVolunteers (see terraform/modules/dynamodb).
+    eks.amazonaws.com/role-arn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/<VOLUNTEER_SERVICE_IRSA_ROLE>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: volunteer-config
+  namespace: ns-volunteer
+data:
+  PORT: "8083"
+  AWS_REGION: "us-east-1"
+  AWS_DYNAMODB_TABLE: "SolidaryTechVolunteers"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: volunteer-service
+  namespace: ns-volunteer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: volunteer-service
+  template:
+    metadata:
+      labels:
+        app: volunteer-service
+    spec:
+      serviceAccountName: volunteer-service
+      containers:
+        - name: volunteer-service
+          image: <ECR_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/volunteer-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: volunteer-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "400m"
+              memory: "384Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: volunteer-service
+  namespace: ns-volunteer
+spec:
+  type: ClusterIP
+  selector:
+    app: volunteer-service
+  ports:
+    - name: http
+      port: 8083
+      targetPort: 8083

@@ -1,0 +1,199 @@
+# kube-prometheus-stack Helm values for SolidaryTech
+# Chart: prometheus-community/kube-prometheus-stack
+# Ref: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+
+# ============================================================
+# Prometheus
+# ============================================================
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: "18GB"
+    scrapeInterval: "30s"
+    evaluationInterval: "30s"
+
+    # Discover ServiceMonitors and PodMonitors from ALL namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    podMonitorNamespaceSelector: {}
+    ruleNamespaceSelector: {}
+    storageSpec: {}
+
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+
+# ============================================================
+# Alertmanager
+# ============================================================
+alertmanager:
+  enabled: true
+
+  config:
+    global:
+      resolve_timeout: 5m
+
+    # No external notification receiver is configured by default to avoid
+    # inventing a channel/credential. Route a real receiver (Slack webhook,
+    # PagerDuty, email, etc.) here before relying on this in production.
+    receivers:
+      - name: 'null'
+
+    route:
+      receiver: 'null'
+      group_by:
+        - 'alertname'
+        - 'severity'
+        - 'namespace'
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+
+    inhibit_rules:
+      - source_match:
+          severity: 'critical'
+        target_match:
+          severity: 'warning'
+        equal:
+          - 'namespace'
+          - 'job'
+
+  alertmanagerSpec:
+    storage: {}
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+
+# ============================================================
+# Grafana
+# ============================================================
+grafana:
+  enabled: true
+  # Admin credentials are read from a pre-existing Kubernetes Secret, never
+  # hardcoded here. Create it before the chart syncs:
+  #   kubectl create secret generic grafana-admin -n monitoring \
+  #     --from-literal=admin-user=admin \
+  #     --from-literal=admin-password=<YOUR_SECURE_PASSWORD>
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # Sidecar auto-discovers dashboards and datasources from ConfigMaps
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+      label: grafana_dashboard
+      labelValue: "1"
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+    datasources:
+      enabled: true
+      searchNamespace: ALL
+
+  # Loki datasource (provisioned automatically)
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+      version: 1
+      editable: false
+      jsonData:
+        maxLines: 1000
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  grafana.ini:
+    server:
+      root_url: "https://<GRAFANA_DOMAIN>"
+    security:
+      allow_embedding: true
+    auth.anonymous:
+      enabled: false
+
+# ============================================================
+# Disable components not available in managed EKS
+# (etcd, scheduler, controller-manager endpoints are not exposed)
+# ============================================================
+kubeEtcd:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+# ============================================================
+# kube-state-metrics and node-exporter
+# ============================================================
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+# ============================================================
+# Default Prometheus alerting rules
+# ============================================================
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false
+    configReloaders: true
+    general: true
+    k8sContainerCpuUsageSecondsTotal: true
+    k8sContainerMemoryCache: true
+    k8sContainerMemoryRss: true
+    k8sContainerMemorySwap: true
+    k8sPodOwner: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubelet: true
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesAbsent: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeStateMetricsErrors: true
+    kubeStateMetricsSharding: false
+    networkPolicy: false
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true

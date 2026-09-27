@@ -1,0 +1,148 @@
+# =============================================================================
+# SolidaryTech — Local Development Environment
+# =============================================================================
+# Infrastructure (3 local stores):
+#   • ngo-db          — PostgreSQL for ngo-service           (host port 5433)
+#   • donation-db     — PostgreSQL for donation-service      (host port 5434)
+#   • localstack      — SQS + DynamoDB Local                 (host port 4566)
+#
+# Application services:
+#   • ngo-service         :8081
+#   • donation-service    :8082
+#   • volunteer-service   :8083
+#
+# Usage:
+#   docker compose up --build
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+
+  ngo-db:
+    image: postgres:16-alpine
+    container_name: st-ngo-db
+    environment:
+      POSTGRES_DB: ngo_db
+      POSTGRES_USER: ngo_user
+      POSTGRES_PASSWORD: ngo_pass
+    volumes:
+      - ngo_postgres_data:/var/lib/postgresql/data
+      - ./ngo-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ngo_user -d ngo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  donation-db:
+    image: postgres:16-alpine
+    container_name: st-donation-db
+    environment:
+      POSTGRES_DB: donation_db
+      POSTGRES_USER: donation_user
+      POSTGRES_PASSWORD: donation_pass
+    volumes:
+      - donation_postgres_data:/var/lib/postgresql/data
+      - ./donation-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U donation_user -d donation_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    image: localstack/localstack:3
+    container_name: st-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs,dynamodb
+      - DEBUG=0
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - localstack_data:/var/lib/localstack
+      # Init script runs automatically when LocalStack is ready.
+      # Creates: SQS queue "solidary-donations" + DynamoDB table "SolidaryTechVolunteers"
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/_localstack/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Application services
+  # ---------------------------------------------------------------------------
+
+  ngo-service:
+    build:
+      context: ./ngo-service
+      dockerfile: Dockerfile
+    container_name: st-ngo-service
+    environment:
+      DATABASE_URL: postgresql://ngo_user:ngo_pass@ngo-db:5432/ngo_db
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+    depends_on:
+      ngo-db:
+        condition: service_healthy
+
+  donation-service:
+    build:
+      context: ./donation-service
+      dockerfile: Dockerfile
+    container_name: st-donation-service
+    environment:
+      DATABASE_URL: postgresql://donation_user:donation_pass@donation-db:5432/donation_db
+      PORT: "8082"
+      # AWS_REGION/AWS_SQS_URL point at real AWS by default. The application
+      # code (main.go) uses the default AWS SDK session without a custom
+      # endpoint resolver, so it cannot target the local LocalStack SQS queue
+      # without a code change. Leave AWS_SQS_URL unset locally to run with
+      # SQS publishing disabled, or set real AWS credentials/queue URL.
+      AWS_REGION: us-east-1
+    ports:
+      - "8082:8082"
+    depends_on:
+      donation-db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+
+  volunteer-service:
+    build:
+      context: ./volunteer-service
+      dockerfile: Dockerfile
+    container_name: st-volunteer-service
+    environment:
+      PORT: "8083"
+      # AWS_REGION/AWS_DYNAMODB_TABLE point at real AWS by default. The
+      # application code (app.py) uses boto3.resource("dynamodb") without a
+      # custom endpoint_url, so it cannot target the local LocalStack
+      # DynamoDB table without a code change. Set real AWS credentials to
+      # use this service locally, or add endpoint_url support in app.py.
+      AWS_REGION: us-east-1
+      AWS_DYNAMODB_TABLE: SolidaryTechVolunteers
+    ports:
+      - "8083:8083"
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+volumes:
+  ngo_postgres_data:
+  donation_postgres_data:
+  localstack_data:
+
+networks:
+  default:
+    name: solidarytech

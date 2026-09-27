@@ -1,20 +1,28 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
 type Donation struct {
@@ -35,6 +43,11 @@ type App struct {
 func main() {
 	_ = godotenv.Load()
 
+	ctx := context.Background()
+	if err := initOTel(ctx); err != nil {
+		log.Fatalf("Falha ao inicializar OpenTelemetry: %v", err)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8082"
@@ -45,8 +58,8 @@ func main() {
 		log.Fatal("DATABASE_URL é obrigatória")
 	}
 
-	db, err := sql.Open("pgx", dbURL)
-	if err != nil || db.Ping() != nil {
+	db, err := connectDB(dbURL)
+	if err != nil {
 		log.Fatalf("Erro ao conectar ao banco de dados: %v", err)
 	}
 	log.Println("Conectado ao PostgreSQL (donation-service).")
@@ -66,14 +79,106 @@ func main() {
 	mux.HandleFunc("/health", app.HealthHandler)
 	mux.HandleFunc("/donations", app.DonationHandler)
 
-	log.Printf("donation-service rodando na porta %s", port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	wrappedMux := otelhttp.NewHandler(mux, "donation-service-http",
+		otelhttp.WithMeterProvider(otel.GetMeterProvider()),
+		otelhttp.WithTracerProvider(otel.GetTracerProvider()),
+	)
+
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      wrappedMux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.Printf("donation-service rodando na porta %s", port) // #nosec G706 -- port comes from trusted deployment config (PORT env var), not attacker-controlled input
+	log.Fatal(server.ListenAndServe())
+}
+
+// connectDB registra o driver pgx com auto-instrumentation via otelsql e
+// abre a conexão com o banco.
+func connectDB(dbURL string) (*sql.DB, error) {
+	driverName, err := otelsql.Register("pgx",
+		otelsql.WithAttributes(semconv.DBSystemPostgreSQL),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := sql.Open(driverName, dbURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+// initOTel configura tracer e meter providers para exportação OTLP ao
+// OpenTelemetry Collector.
+func initOTel(ctx context.Context) error {
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String("donation-service"),
+			semconv.ServiceVersionKey.String("1.0.0"),
+			semconv.ServiceInstanceIDKey.String(os.Getenv("HOSTNAME")),
+		),
+	)
+	if err != nil {
+		return err
+	}
+
+	traceExporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(getOTelCollectorEndpoint()),
+		otlptracegrpc.WithInsecure(),
+	)
+	if err != nil {
+		return err
+	}
+
+	tp := trace.NewTracerProvider(
+		trace.WithResource(res),
+		trace.WithBatcher(traceExporter),
+		trace.WithSampler(trace.AlwaysSample()),
+	)
+	otel.SetTracerProvider(tp)
+
+	metricExporter, err := otlpmetricgrpc.New(ctx,
+		otlpmetricgrpc.WithEndpoint(getOTelCollectorEndpoint()),
+		otlpmetricgrpc.WithInsecure(),
+	)
+	if err != nil {
+		return err
+	}
+
+	mp := metric.NewMeterProvider(
+		metric.WithResource(res),
+		metric.WithReader(metric.NewPeriodicReader(metricExporter)),
+	)
+	otel.SetMeterProvider(mp)
+
+	log.Println("OpenTelemetry inicializado com sucesso")
+	return nil
+}
+
+// getOTelCollectorEndpoint retorna o endpoint do OTel Collector.
+func getOTelCollectorEndpoint() string {
+	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); endpoint != "" {
+		return endpoint
+	}
+	return "opentelemetry-collector.monitoring.svc.cluster.local:4317"
 }
 
 func (a *App) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok","service":"donation-service"}`))
+	if _, err := w.Write([]byte(`{"status":"ok","service":"donation-service"}`)); err != nil {
+		log.Printf("Erro ao escrever resposta de health check: %v", err)
+	}
 }
 
 func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +208,9 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(d)
+		if err := json.NewEncoder(w).Encode(d); err != nil {
+			log.Printf("Erro ao codificar resposta: %v", err)
+		}
 		return
 	}
 
@@ -118,11 +225,16 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 		donations := []Donation{}
 		for rows.Next() {
 			var d Donation
-			rows.Scan(&d.ID, &d.NgoID, &d.Amount, &d.DonorName, &d.Status, &d.CreatedAt)
+			if err := rows.Scan(&d.ID, &d.NgoID, &d.Amount, &d.DonorName, &d.Status, &d.CreatedAt); err != nil {
+				log.Printf("Erro ao ler linha de doação: %v", err)
+				continue
+			}
 			donations = append(donations, d)
 		}
 
-		json.NewEncoder(w).Encode(donations)
+		if err := json.NewEncoder(w).Encode(donations); err != nil {
+			log.Printf("Erro ao codificar resposta: %v", err)
+		}
 		return
 	}
 

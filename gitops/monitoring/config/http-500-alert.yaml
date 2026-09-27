@@ -1,0 +1,71 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: solidarytech-http-500-alerts
+  namespace: monitoring
+  labels:
+    # kube-prometheus-stack discovers PrometheusRules with this label
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: solidarytech.http500
+      interval: 30s
+      rules:
+        # -------------------------------------------------------
+        # Alert: any service returning 5xx via ingress-nginx
+        # -------------------------------------------------------
+        - alert: HighHTTP500RateIngress
+          expr: |
+            sum by (ingress, service, namespace) (
+              rate(nginx_ingress_controller_requests{status=~"5..", namespace=~"ns-ngo|ns-donation|ns-volunteer"}[5m])
+            ) > 0.002
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "HTTP 5xx errors detected on {{ $labels.service }}"
+            description: >
+              Service *{{ $labels.service }}* (namespace: {{ $labels.namespace }},
+              ingress: {{ $labels.ingress }}) is returning 5xx errors at a rate of
+              {{ $value | humanize }} req/s over the last 5 minutes.
+            runbook_url: "https://github.com/VianaCoder/hackathon-FIAP-solidarytech/blob/main/README.md"
+
+        # -------------------------------------------------------
+        # Alert: service-level 5xx via application-exposed metrics
+        # (fallback for services without ingress-level visibility)
+        # -------------------------------------------------------
+        - alert: HighHTTP500RateService
+          expr: |
+            sum by (job, namespace) (
+              rate(http_requests_total{status=~"5..", namespace=~"ns-ngo|ns-donation|ns-volunteer"}[5m])
+            ) > 0.002
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "HTTP 5xx errors on service {{ $labels.job }}"
+            description: >
+              Service *{{ $labels.job }}* (namespace: {{ $labels.namespace }})
+              is returning 5xx errors at a rate of {{ $value | humanize }} req/s.
+            runbook_url: "https://github.com/VianaCoder/hackathon-FIAP-solidarytech/blob/main/README.md"
+
+        # -------------------------------------------------------
+        # Alert: early warning (lower threshold)
+        # -------------------------------------------------------
+        - alert: HTTP500RateWarning
+          expr: |
+            sum by (ingress, service, namespace) (
+              rate(nginx_ingress_controller_requests{status=~"5..", namespace=~"ns-ngo|ns-donation|ns-volunteer"}[5m])
+            ) > 0.0005
+          for: 2m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Early 5xx errors on {{ $labels.service }}"
+            description: >
+              Service *{{ $labels.service }}* is showing 5xx errors
+              ({{ $value | humanize }} req/s). Investigate before it escalates to critical.

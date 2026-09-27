@@ -1,0 +1,55 @@
+# Promtail Helm values for SolidaryTech
+# Chart: grafana/promtail
+# Deployed as a DaemonSet — one Promtail pod per node, tailing all container logs.
+
+config:
+  # Send logs to Loki in the monitoring namespace
+  clients:
+    - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+  snippets:
+    scrapeConfigs: |
+      # Collect all container logs from Kubernetes pods
+      - job_name: kubernetes-pods
+        pipeline_stages:
+          - docker: {}
+          # Add a label to distinguish SolidaryTech services from platform services
+          - labels:
+              app:
+              namespace:
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            separator: /
+            replacement: /var/log/pods/*$1/*.log
+            target_label: __path__
+          # Drop only Promtail's own container logs to avoid feedback loops
+          - source_labels: [container]
+            regex: promtail
+            action: drop
+
+# Tolerate all taints so Promtail runs on every node (including tainted ones)
+tolerations:
+  - effect: NoSchedule
+    operator: Exists
+  - effect: NoExecute
+    operator: Exists
+
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "200m"
+    memory: "128Mi"

@@ -1,0 +1,32 @@
+# Argo CD Application: monitoring-config
+# Deploys raw Kubernetes manifests for the monitoring stack:
+#   - Grafana Ingress (HTTPS access via nginx + cert-manager)
+#   - SolidaryTech custom Grafana dashboard (ConfigMap auto-discovered by Grafana sidecar)
+#   - HTTP 5xx PrometheusRule alerts
+#   - OTel Collector ServiceMonitor
+#
+# Depends on kube-prometheus-stack being deployed first (sync-wave: 30)
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/VianaCoder/hackathon-FIAP-solidarytech.git
+    targetRevision: main
+    path: gitops/monitoring/config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

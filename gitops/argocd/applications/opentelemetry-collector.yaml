@@ -1,0 +1,39 @@
+# Argo CD Application: opentelemetry-collector
+# Deploys OpenTelemetry Collector as the central telemetry hub
+#
+# The OTel Collector:
+#   - Receives OTLP from microservices (OTLP gRPC:4317, HTTP:4318)
+#   - Routes metrics to Prometheus (prometheus exporter:8889)
+#   - Routes logs to Loki (OTLP gRPC)
+#   - Routes traces to a debug exporter placeholder (see values.yaml)
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opentelemetry-collector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "15"
+spec:
+  project: default
+  sources:
+    - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+      chart: opentelemetry-collector
+      targetRevision: "0.88.0"
+      helm:
+        releaseName: opentelemetry-collector
+        valueFiles:
+          - $values/gitops/monitoring/opentelemetry-collector/values.yaml
+    - repoURL: https://github.com/VianaCoder/hackathon-FIAP-solidarytech.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

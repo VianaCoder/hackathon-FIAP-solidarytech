@@ -1,0 +1,75 @@
+# Loki Helm values for SolidaryTech (SingleBinary / Monolithic mode)
+# Chart: grafana/loki
+# Monolithic mode: single replica, filesystem storage — suitable for dev/staging EKS.
+# For production, switch to scalable mode with S3 object storage.
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    path_prefix: /tmp/loki
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  limits_config:
+    ingestion_rate_mb: 16
+    ingestion_burst_size_mb: 32
+    max_query_series: 100000
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h  # 7 days
+
+  # Structured metadata support (Loki 3.x)
+  structuredMetadata:
+    enabled: true
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false
+  extraVolumes:
+    - name: loki-data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: loki-data
+      mountPath: /var/loki
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+# Disable unused microservices-mode components
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0
+
+# Disable optional components not needed in single-binary mode
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+minio:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false

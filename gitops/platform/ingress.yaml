@@ -1,0 +1,83 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ngo-ingress
+  namespace: ns-ngo
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - <API_DOMAIN>
+      secretName: api-tls-ngo
+  rules:
+    - host: <API_DOMAIN>
+      http:
+        paths:
+          - path: /ngo(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ngo-service
+                port:
+                  number: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: donation-ingress
+  namespace: ns-donation
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - <API_DOMAIN>
+      secretName: api-tls-donation
+  rules:
+    - host: <API_DOMAIN>
+      http:
+        paths:
+          - path: /donations(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: donation-service
+                port:
+                  number: 8082
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: volunteer-ingress
+  namespace: ns-volunteer
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - <API_DOMAIN>
+      secretName: api-tls-volunteer
+  rules:
+    - host: <API_DOMAIN>
+      http:
+        paths:
+          - path: /volunteers(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: volunteer-service
+                port:
+                  number: 8083

@@ -1,0 +1,200 @@
+name: ngo-service CI/CD
+
+on:
+  pull_request:
+    paths:
+      - ngo-service/**
+      - .github/workflows/ngo-service-ci.yml
+  push:
+    branches:
+      - main
+    paths:
+      - ngo-service/**
+      - .github/workflows/ngo-service-ci.yml
+
+env:
+  SERVICE_PATH: ngo-service
+  ECR_REPOSITORY: ngo-service
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+jobs:
+  build-unit-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Build check
+        run: python -m py_compile app.py
+
+      - name: Unit tests
+        run: |
+          if [ -d tests ] || ls test_*.py >/dev/null 2>&1; then
+            pytest -q
+          else
+            echo "No unit tests found."
+          fi
+
+  linter-static-analysis:
+    name: Linter/Static Analysis
+    runs-on: ubuntu-latest
+    needs: build-unit-test
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install lint tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+
+      - name: Run flake8
+        run: flake8 . --max-line-length=120
+
+  security-scan:
+    name: Security Scan (SAST & SCA)
+    runs-on: ubuntu-latest
+    needs: linter-static-analysis
+    defaults:
+      run:
+        working-directory: ${{ env.SERVICE_PATH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install SAST tool
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit
+
+      - name: Run bandit (SAST)
+        run: bandit -r . -f txt -ll || true  # Log Medium issues but don't block
+
+      - name: Run Trivy filesystem scan (SCA + source scan, fail on CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.SERVICE_PATH }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+  docker-build-push:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: security-scan
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=v1.0.0-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.SERVICE_PATH }}
+
+      - name: Trivy image scan (fail on CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Configure AWS credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and push image to ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker tag ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+      - name: Update GitOps manifest image tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          FILE="gitops/services/${{ env.ECR_REPOSITORY }}/deployment.yaml"
+          sed -i "s|image: .*${{ env.ECR_REPOSITORY }}:.*|image: $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}|" "$FILE"
+
+      - name: Commit and push GitOps update
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          FILE="gitops/services/${{ env.ECR_REPOSITORY }}/deployment.yaml"
+
+          for i in 1 2 3; do
+            git fetch origin main
+            git checkout -B ci-gitops-update origin/main
+
+            sed -i "s|image: .*${{ env.ECR_REPOSITORY }}:.*|image: $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}|" "$FILE"
+
+            git add "$FILE"
+            if git diff --cached --quiet; then
+              echo "No GitOps changes to commit"
+              exit 0
+            fi
+
+            git commit -m "chore(gitops): update ${{ env.ECR_REPOSITORY }} image to ${{ env.IMAGE_TAG }} [skip ci]"
+
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+
+            echo "Push failed due to concurrent updates. Retrying ($i/3)..."
+            git reset --hard HEAD~1
+            sleep 2
+          done
+
+          echo "Failed to push GitOps update after 3 attempts"
+          exit 1

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: volunteer-service
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/VianaCoder/hackathon-FIAP-solidarytech.git
+    targetRevision: main
+    path: gitops/services/volunteer-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ns-volunteer
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true
