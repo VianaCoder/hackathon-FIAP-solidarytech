@@ -220,7 +220,11 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"Erro interno"}`, http.StatusInternalServerError)
 			return
 		}
-		defer rows.Close()
+		defer func() {
+			if cerr := rows.Close(); cerr != nil {
+				log.Printf("Erro ao fechar rows: %v", cerr)
+			}
+		}()
 
 		donations := []Donation{}
 		for rows.Next() {
