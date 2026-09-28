@@ -16,10 +16,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - <GRAFANA_DOMAIN>
+        - grafana.gvianalourenco.xyz
       secretName: grafana-tls
   rules:
-    - host: <GRAFANA_DOMAIN>
+    - host: grafana.gvianalourenco.xyz
       http:
         paths:
           - path: /

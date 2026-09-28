@@ -12,10 +12,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - <API_DOMAIN>
+        - api.gvianalourenco.xyz
       secretName: api-tls-ngo
   rules:
-    - host: <API_DOMAIN>
+    - host: api.gvianalourenco.xyz
       http:
         paths:
           - path: /ngo(/|$)(.*)
@@ -40,10 +40,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - <API_DOMAIN>
+        - api.gvianalourenco.xyz
       secretName: api-tls-donation
   rules:
-    - host: <API_DOMAIN>
+    - host: api.gvianalourenco.xyz
       http:
         paths:
           - path: /donations(/|$)(.*)
@@ -68,10 +68,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - <API_DOMAIN>
+        - api.gvianalourenco.xyz
       secretName: api-tls-volunteer
   rules:
-    - host: <API_DOMAIN>
+    - host: api.gvianalourenco.xyz
       http:
         paths:
           - path: /volunteers(/|$)(.*)

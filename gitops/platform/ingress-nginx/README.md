@@ -1,0 +1,1 @@
+Ingress-nginx installed via upstream static provider manifest (cloud). This folder intentionally empty — controller is installed via cluster apply rather than Helm chart in GitOps to ensure Service type=LoadBalancer is present.
