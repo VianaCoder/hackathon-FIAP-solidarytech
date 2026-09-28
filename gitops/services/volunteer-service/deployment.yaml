@@ -35,7 +35,7 @@ spec:
       serviceAccountName: volunteer-service
       containers:
         - name: volunteer-service
-          image: <ECR_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/volunteer-service:latest
+          image: 127214161915.dkr.ecr.us-east-1.amazonaws.com/volunteer-service:v1.0.0-b582c91
           imagePullPolicy: Always
           ports:
             - containerPort: 8083
