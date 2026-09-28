@@ -54,7 +54,7 @@ spec:
                 name: ngo-secret
       containers:
         - name: ngo-service
-          image: <ECR_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/ngo-service:latest
+          image: 127214161915.dkr.ecr.us-east-1.amazonaws.com/ngo-service:v1.0.0-b582c91
           imagePullPolicy: Always
           ports:
             - containerPort: 8081
