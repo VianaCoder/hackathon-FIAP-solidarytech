@@ -22,6 +22,19 @@ clusterRole:
   create: true
 
 # ============================================================
+# New Relic license key, injected from a pre-existing Secret.
+# Create it before the chart syncs:
+#   kubectl create secret generic newrelic-license -n monitoring \
+#     --from-literal=license-key=<YOUR_LICENSE_KEY>
+# ============================================================
+extraEnvs:
+  - name: NEW_RELIC_LICENSE_KEY
+    valueFrom:
+      secretKeyRef:
+        name: newrelic-license
+        key: license-key
+
+# ============================================================
 # Presets: automatically add env vars, volumes, etc.
 # ============================================================
 presets:
@@ -124,9 +137,15 @@ config:
         num_consumers: 4
         queue_size: 5000
 
-    # Placeholder trace exporter. Replace with a real APM backend
-    # (datadog, otlp/jaeger, otlp/tempo, etc.) before relying on traces
-    # in production. Left as debug to avoid inventing credentials.
+    # New Relic APM backend (US endpoint). License key injected via
+    # the NEW_RELIC_LICENSE_KEY env var (see extraEnvs / newrelic-license Secret).
+    otlp/newrelic:
+      endpoint: otlp.nr-data.net:4317
+      headers:
+        api-key: ${env:NEW_RELIC_LICENSE_KEY}
+
+    # Debug exporter kept alongside New Relic for local troubleshooting
+    # of collector pipelines (visible via `kubectl logs`).
     debug: {}
 
   # ========== SERVICE ==========
@@ -147,11 +166,17 @@ config:
         processors: [memory_limiter, batch, resourcedetection/system, attributes]
         exporters: [otlp/loki]
 
-      # Traces pipeline: OTLP traces -> debug exporter placeholder
+      # Traces pipeline: OTLP traces -> New Relic APM (+ debug for troubleshooting)
       traces:
         receivers: [otlp]
         processors: [memory_limiter, batch, resourcedetection/system]
-        exporters: [debug]
+        exporters: [otlp/newrelic, debug]
+
+      # Metrics also mirrored to New Relic for infrastructure/APM correlation
+      metrics/newrelic:
+        receivers: [otlp]
+        processors: [memory_limiter, batch, resourcedetection/system, attributes]
+        exporters: [otlp/newrelic]
 
 # ============================================================
 # Ports: expose OTLP receivers and Prometheus exporter
