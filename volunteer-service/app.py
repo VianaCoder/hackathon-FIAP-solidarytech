@@ -75,16 +75,18 @@ except Exception as e:
     log.critical(f"Falha ao conectar no DynamoDB: {e}")
     sys.exit(1)
 
+
 @app.route('/health')
 def health():
     return jsonify({"status": "ok", "service": "volunteer-service"})
+
 
 @app.route('/volunteers', methods=['POST'])
 def register_volunteer():
     data = request.get_json()
     if not data or not all(k in data for k in ('name', 'email', 'ngo_id')):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
-    
+
     volunteer_id = str(uuid.uuid4())
     item = {
         'volunteer_id': volunteer_id,
@@ -93,13 +95,14 @@ def register_volunteer():
         'ngo_id': int(data['ngo_id']),
         'registered_at': str(int(time.time()))
     }
-    
+
     try:
         table.put_item(Item=item)
         return jsonify(item), 201
     except Exception as e:
         log.error(f"Erro ao salvar voluntário no DynamoDB: {e}")
         return jsonify({"error": "Erro interno ao processar dados"}), 500
+
 
 @app.route('/volunteers/<int:ngo_id>', methods=['GET'])
 def get_volunteers_by_ngo(ngo_id):
@@ -114,6 +117,8 @@ def get_volunteers_by_ngo(ngo_id):
         log.error(f"Erro ao buscar dados no DynamoDB: {e}")
         return jsonify({"error": "Erro interno"}), 500
 
+
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8083))
     app.run(host='0.0.0.0', port=port)
+# CI pipeline test trigger (safe to remove)
