@@ -4,8 +4,8 @@ metadata:
   name: volunteer-service
   namespace: ns-volunteer
   annotations:
-    # IRSA role granting dynamodb read/write on SolidaryTechVolunteers (see terraform/modules/dynamodb).
-    eks.amazonaws.com/role-arn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/<VOLUNTEER_SERVICE_IRSA_ROLE>"
+    # IRSA role granting dynamodb read/write on SolidaryTechVolunteers (see infra/terraform/environments/dev/irsa.tf).
+    eks.amazonaws.com/role-arn: "arn:aws:iam::127214161915:role/solidarytech-dev-volunteer-service-irsa"
 ---
 apiVersion: v1
 kind: ConfigMap

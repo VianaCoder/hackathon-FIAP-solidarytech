@@ -4,8 +4,8 @@ metadata:
   name: donation-service
   namespace: ns-donation
   annotations:
-    # IRSA role granting sqs:SendMessage on the donations queue (see terraform/modules/sqs).
-    eks.amazonaws.com/role-arn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/<DONATION_SERVICE_IRSA_ROLE>"
+    # IRSA role granting sqs:SendMessage on the donations queue (see infra/terraform/environments/dev/irsa.tf).
+    eks.amazonaws.com/role-arn: "arn:aws:iam::127214161915:role/solidarytech-dev-donation-service-irsa"
 ---
 apiVersion: v1
 kind: ConfigMap

@@ -41,3 +41,11 @@ output "sqs_queue_url" {
 output "ecr_repository_urls" {
   value = module.ecr.repository_urls
 }
+
+output "volunteer_service_irsa_role_arn" {
+  value = aws_iam_role.volunteer_service_irsa.arn
+}
+
+output "donation_service_irsa_role_arn" {
+  value = aws_iam_role.donation_service_irsa.arn
+}
