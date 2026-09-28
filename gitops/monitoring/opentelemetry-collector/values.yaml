@@ -205,6 +205,11 @@ ports:
     containerPort: 8888
     servicePort: 8888
     protocol: TCP
+  prometheus:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
 
 # ============================================================
 # Service type: ClusterIP for internal communication
