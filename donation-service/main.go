@@ -92,7 +92,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("donation-service rodando na porta %s", port) // #nosec G706 -- port comes from trusted deployment config (PORT env var), not attacker-controlled input 
+	log.Printf("donation-service rodando na porta %s", port) // #nosec G706 -- port comes from trusted deployment config (PORT env var), not attacker-controlled in 
 	log.Fatal(server.ListenAndServe())
 }
 
